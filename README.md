@@ -14,7 +14,7 @@ The objective of this project is to implement Model Predictive Control (MPC) to 
 
 We will first describe the state, actuator and update equations (ingredients in the model) and then go on to describe the MPC model setup and loop. We will then discuss tuning parameters.
 
-#### State [x,y,\psi,v]
+#### State [x,y,$$\psi$$,v]
 Our state can be described using four components:
 1. x: the x-position
 - y: the y-position
