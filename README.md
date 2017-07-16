@@ -6,79 +6,96 @@ The objective of this project is to implement Model Predictive Control (MPC) to 
 ## Table of contents
 
 1. MPC Model Overview
-2. Description of N and dt
-3. Preprocessing Steps
+2. Preprocessing Steps
+3. Description of N and dt
 3. Latency Effect
 
 ## 1. MPC Model Overview
 
-We will first describe the state, actuator and update equations (ingredients in the model) and then go on to describe the MPC model setup and loop. We will then discuss tuning parameters.
+We will first describe the state, actuator and update equations.
 
-#### State [x,y,$$\psi$$,v]
-Our state can be described using four components:
+### State [x,y,ψ,v,cte,eψ]
+The state vector consists of four components:
 1. x: the x-position
-- y: the y-position
-- ψ: the vehicle orientation
-- v: the velocity
+2. y: the y-position
+3. ψ: the vehicle orientation
+4. v: the velocity
+5. cte: cross-track error
+6. eψ: orientation error
 
-#### Actuators [δ, a]
-* An actuator is a component that controls a system. Here we have two actuators: 
-    * δ (the steering angle) and 
-    * a (acceleration, i.e. throttle and brake pedals).
+### Actuators [δ, a]
+Two actuators are considered in the model, namely:
+1. δ: steering angle
+2. a: acceleration
 
-#### Update equations (Vehicle Dynamics)
-* x = x + v\*cos(ψ)\* dt 
-* y = y + v sin(psi) dt
-* v=v+a∗dt
-    * a in [-1,1]
-* ψ=ψ+(v/L_f)*δ∗dt
+### Update Equations
+The codes for the evolution of state components are shown here:
+```
+x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
+y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
+psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
+v_[t+1] = v[t] + a[t] * dt
+cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
+epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
+```
 
-#### MPC Setup:
-1. Define the length of the trajectory, N, and duration of each timestep, dt.
-    * See below for definitions of N, dt, and discussion on parameter tuning.
-* Define vehicle dynamics and actuator limitations along with other constraints.
-    * See the state, actuators and update equations above.
-* Define the cost function.
-    * Cost in this MPC increases with: (see `MPC.cpp` lines 80-101)
-        * Difference from reference state (cross-track error, orientation and velocity)
-        * Use of actuators (steering angle and acceleration)
-        * Value gap between sequential actuators (change in steering angle and change in acceleration).
-    * We take the deviations and square them to penalise over and under-shooting equally.
-        * This may not be optimal.
-    * Each factor mentioned above contributed to the cost in different proportions. We did this by multiplying the squared deviations by weights unique to each factor.
+## 2. Preprocessing Steps
 
-#### MPC Loop:
-1. We **pass the current state** as the initial state to the model predictive controller.
-* We call the optimization solver. Given the initial state, the solver will ***return the vector of control inputs that minimizes the cost function**. The solver we'll use is called Ipopt.
-* We **apply the first control input to the vehicle**.
-* Back to 1.
+### Define N and dt
+See below for definitions of N, dt, as well as discussion on parameter tuning.
 
-*Reference: Setup and Loop description taken from Udacity's Model Predictive Control lesson.*
+### Transform waypoints from map coordinates to vehicle coordinates
+The transformation is done by the codes as follows.
+```
+for (int i = 0; i < ptsx.size(); i++) {
+  double dtx = ptsx[i] - px;
+  double dty = ptsy[i] - py;
+  ptsx[i] = dtx * cos(psi) + dty * sin(psi);
+  ptsy[i] = dty * cos(psi) - dtx * sin(psi);
+}
+```
+
+### Define the cost function.
+The following weight parameters are added into the cost function.
+```
+double error_epsi_adj = 500; //orientation error
+double error_cte_adj = 1000; // cross-track error
+double error_v_adj = 1; // velocity error
+double error_delta_adj = 10; //penalize large steering angle
+double error_a_adj = 10; // penalize large acceleration
+double error_delta_diff_adj = 100; //penalize large steering angle change rate
+double error_delta_a_adj = 10; //penalize large acceleration change rate
+```
+The weight factors contribute to the total cost by multiplying the respective squared deviations.
 
 
-#### N and dt
-* N is the number of timesteps the model predicts ahead. As N increases, the model predicts further ahead.
-* dt is the length of each timestep. As dt decreases, the model re-evaluates its actuators more frequently. This may give more accurate predictions, but will use more computational power. If we keep N constant, the time horizon over which we predict ahead also decreases as dt decreases.
+## 3. Description of N and dt
+N is the number of timesteps the model predicts ahead, while dt is the length of each timestep.
 
-#### Tuning N and dt
-* I started with (N, dt) = (10, 0.1) (arbitrary starting point). The green panth would often curve to the right or left near the end, so I tried increasing N so the model would try to fit more of the upcoming path and would be penalised more if it curved off erratically after 10 steps.
-* Increasing N to 15 improved the fit and made the vehicle drive smoother. Would increasing N further improve performance?
-* Increasing N to 20 (dt = 0.1) made the vehicle weave more (drive less steadily) especially after the first turn. 
-    * The weaving was exacerbated with N = 50 - the vehicle couldn't even stay on the track for five seconds. 
-* Increasing dt to 0.2 (N = 10) made the vehicle too slow to respond to changes in lane curvature. E.g. when it reached the first turn, it only started steering left when it was nearly off the track. This delayed response is expected because it re-evaluates the model less frequently. 
-* Decreasing dt to 0.05 made the vehicle drive in a really jerky way.
-* So I chose N = 15, dt = 0.1.
-* It would be better to test variations in N and dt more rigorously and test different combinations of N, dt and the contributions of e.g. cross-track error to cost. 
-* It would also be good to discuss variations in N and dt without holding N or dt fixed at 10 and 0.1 respectively.
+### Tuning N and dt
 
-### Latency
-* If we don't add latency, the car will be steering and accelerating/braking based on what the model thinks it should've done 100ms ago. The car will respond too slowly to changes in its position and thus changes in cost. 
-	* It may not start steering e.g. left when it goes round a curve, leading it to veer off the track. 
-	* Likewise, it may continue steering even when the path stops curving. 
-	* The faster the vehicle speed, the worse the effects of latency that is unaccounted for.
-* **Implementation**: We used the kinematic model to predict the state 100ms ahead of time and then feed that predicted state into the MPC solver.
-	* We chose 100ms because that's the duration of the latency. That is, we try to predict where the car will be when our instructions reach the car so the steering angle and throttle will be appropriate for when our instructions reach the car (100ms later).
-	* The code can be found in `main.cpp`.
+| Trial  | N            | dt               | Observation               |
+|:------:|:-------------:|:---------------:|:---------------:| 
+| 1      | **10**           | **0.1**            | Car is able to complete the entire lap, but there is sometimes perturbance in the predicted path.             | 
+| 2      | *40*           | 0.1            | The track predicted is more smooth, but computation takes more time.            | 
+| 3      | *4*          | 0.1            | The car went off the road due to insufficient information in prediction.            | 
+| 4      | 10           | *0.2*            | The car is not able to respond to the curvature in the road in time and went off the road.             | 
+| 5      | 10           | *0.01*            | The total predicted time is too small therefore the car oscillates around the track heavily.            | 
 
-### Other comments
-* Strangely, when tackling the case where there is 100ms latency, predicting the state 100ms ahead gave a worse outcome than not predicting the state.
+As a trade-off between performance and efficiency, N=10 and dt=0.1 is the final choice. More complete evaluation of the effect of N, dt, such as using **Twiddle**, is planned to be tried once time permits.
+
+## 4. Latency Effect
+The latency of **100ms** is added into the model so that our kinematic model would be able to predict its status taking into the delay in response of the actuators into account.
+
+```
+  Eigen::VectorXd state(6);            
+  double dt = 0.1;      
+  // assuming x = y = psi = 0
+  double predicted_x = v * dt;
+  double predicted_y = 0;
+  double predicted_psi = - v * delta / Lf * dt;
+  double predicted_v = v + a * dt;
+  double predicted_cte = cte + v * sin(epsi) * dt;
+  double predicted_epsi = epsi - v * delta / Lf * dt;
+  state << predicted_x, predicted_y, predicted_psi, predicted_v, predicted_cte, predicted_epsi;
+```

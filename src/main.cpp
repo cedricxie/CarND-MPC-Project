@@ -116,7 +116,7 @@ int main() {
           
           Eigen::VectorXd state(6);           
           
-          double dt = 0.0;
+          double dt = 0.1;
           // steering angle and throttle
           double delta = j[1]["steering_angle"];
           double a = j[1]["throttle"];          
@@ -126,7 +126,7 @@ int main() {
           double predicted_psi = - v * delta / Lf * dt;
           double predicted_v = v + a * dt;
           double predicted_cte = cte + v * sin(epsi) * dt;
-          double predicted_epsi = epsi + predicted_psi;
+          double predicted_epsi = epsi - v * delta / Lf * dt;
           
           state << predicted_x, predicted_y, predicted_psi, predicted_v, predicted_cte, predicted_epsi;
 

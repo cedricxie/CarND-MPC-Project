@@ -6,7 +6,7 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 15;
+size_t N = 10;
 double dt = 0.1;
 
 // This value assumes the model presented in the classroom is used.
@@ -22,10 +22,14 @@ double dt = 0.1;
 const double Lf = 2.67;
 
 //********************* Parameter Definition *********************//
-double vel_ref = 40;
+double vel_ref = 30;
 double error_epsi_adj = 500;
-double error_cte_adj = 3000;
-double error_delta_diff_adj = 200;
+double error_cte_adj = 1000;
+double error_v_adj = 1;
+double error_delta_adj = 10;
+double error_a_adj = 10;
+double error_delta_diff_adj = 100;
+double error_delta_a_adj = 10;
 //********************* Parameter Definition *********************//
 
 size_t x_start = 0;
@@ -56,17 +60,17 @@ class FG_eval {
     for (int t = 0; t < N; t++) {
       fg[0] += error_cte_adj*CppAD::pow(vars[cte_start + t], 2);
       fg[0] += error_epsi_adj*CppAD::pow(vars[epsi_start + t], 2);
-      fg[0] += CppAD::pow(vars[v_start + t] - vel_ref, 2);
+      fg[0] += error_v_adj*CppAD::pow(vars[v_start + t] - vel_ref, 2);
     }
     // Minimize the use of actuators.
     for (int t = 0; t < N - 1; t++) {
-      fg[0] += CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t], 2);
+      fg[0] += error_delta_adj*CppAD::pow(vars[delta_start + t], 2);
+      fg[0] += error_a_adj*CppAD::pow(vars[a_start + t], 2);
     }
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
       fg[0] += error_delta_diff_adj * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += error_delta_a_adj * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }    
     // Initial constraints    
     fg[1 + x_start] = vars[x_start];

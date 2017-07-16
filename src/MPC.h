@@ -10,9 +10,6 @@ class MPC {
  public:
   MPC();
 
-  //double prev_delta = 0;
-  //double prev_a = 0;
-
   virtual ~MPC();
 
   // Solve the model given an initial state and polynomial coefficients.
